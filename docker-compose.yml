@@ -1,0 +1,68 @@
+services:
+  zookeeper:
+    image: confluentinc/cp-zookeeper:7.5.0
+    environment:
+      ZOOKEEPER_CLIENT_PORT: 2181
+      ZOOKEEPER_TICK_TIME: 2000
+    ports:
+      - '2181:2181'
+
+  kafka:
+    image: confluentinc/cp-kafka:7.5.0
+    depends_on:
+      - zookeeper
+    environment:
+      KAFKA_BROKER_ID: 1
+      KAFKA_ZOOKEEPER_CONNECT: 'zookeeper:2181'
+      KAFKA_ADVERTISED_LISTENERS: 'PLAINTEXT://kafka:9092'
+      KAFKA_LISTENERS: 'PLAINTEXT://0.0.0.0:9092'
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: 'true'
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_LOG4J_ROOT_LOGLEVEL: 'ERROR'
+    ports:
+      - '9092:9092'
+    healthcheck:
+      test: ["CMD", "bash", "-c", "echo > /dev/tcp/kafka/9092"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  middleware:
+    build:
+      context: .
+      dockerfile: Dockerfile.middleware
+    command: 'node middleware.js'
+    depends_on:
+      - kafka
+    environment:
+      KAFKA_BROKER: 'kafka:9092'
+      KAFKAJS_LOG_LEVEL: 'ERROR'
+      PORT: 8080
+    ports:
+      - '8080:8080'
+
+  writer:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    command: 'node writer.js'
+    depends_on:
+      - kafka
+    environment:
+      KAFKA_BROKER: 'kafka:9092'
+      KAFKAJS_LOG_LEVEL: 'ERROR'
+    stdin_open: true
+    tty: true
+    restart: on-failure
+
+  reader:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    command: 'node reader.js'
+    depends_on:
+      - kafka
+    environment:
+      KAFKA_BROKER: 'kafka:9092'
+      KAFKAJS_LOG_LEVEL: 'ERROR'
+    restart: on-failure
